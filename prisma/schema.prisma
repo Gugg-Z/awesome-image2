@@ -1,0 +1,305 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  DEVELOPER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum PromptSource {
+  DEVELOPER_UPLOAD
+  USER_SUBMISSION
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PublishStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum AssetProvider {
+  LOCAL
+  S3
+  OSS
+  COS
+  MINIO
+}
+
+enum AssetKind {
+  PROMPT_EXAMPLE
+  GENERATED_IMAGE
+  USER_UPLOAD
+  THUMBNAIL
+}
+
+enum GenerationStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum CreditTransactionType {
+  RECHARGE
+  GENERATION_DEBIT
+  GENERATION_REFUND
+  SUBMISSION_REWARD
+  CREATOR_SHARE
+  ADMIN_ADJUSTMENT
+}
+
+enum SystemSettingValueType {
+  STRING
+  NUMBER
+  BOOLEAN
+  JSON
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  role          UserRole  @default(USER)
+  status        UserStatus @default(ACTIVE)
+  creditBalance Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts           Account[]
+  sessions           Session[]
+  prompts            Prompt[]              @relation("PromptAuthor")
+  submissions        PromptSubmission[]
+  generations        ImageGeneration[]
+  creditTransactions CreditTransaction[]   @relation("CreditTransactionUser")
+  reviewedSubmissions PromptSubmission[]   @relation("SubmissionReviewer")
+  reviewedPrompts    Prompt[]              @relation("PromptReviewer")
+
+  @@index([role])
+  @@index([status])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Prompt {
+  id             String        @id @default(cuid())
+  slug           String        @unique
+  title          String
+  description    String?
+  positivePrompt String        @db.Text
+  negativePrompt String?       @db.Text
+  category       String
+  tags           String[]
+  model          String
+  ratio          String
+  quality        String?
+  costCredits    Int
+  source         PromptSource
+  reviewStatus   ReviewStatus  @default(PENDING)
+  publishStatus  PublishStatus @default(DRAFT)
+  authorId       String?
+  reviewerId     String?
+  reviewedAt     DateTime?
+  reviewNote     String?       @db.Text
+  usageCount     Int           @default(0)
+  copyCount      Int           @default(0)
+  likeCount      Int           @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  author      User?              @relation("PromptAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  reviewer    User?              @relation("PromptReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  images      PromptImage[]
+  submissions PromptSubmission[]
+  generations ImageGeneration[]
+
+  @@index([category])
+  @@index([reviewStatus, publishStatus])
+  @@index([source])
+  @@index([authorId])
+}
+
+model PromptImage {
+  id        String   @id @default(cuid())
+  promptId  String
+  assetId   String
+  isPrimary Boolean  @default(false)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  prompt Prompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
+  asset  Asset  @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([promptId, sortOrder])
+  @@index([assetId])
+  @@unique([promptId, assetId])
+}
+
+model PromptSubmission {
+  id             String       @id @default(cuid())
+  userId         String
+  promptId       String?
+  title          String
+  description    String?
+  positivePrompt String       @db.Text
+  negativePrompt String?      @db.Text
+  category       String
+  tags           String[]
+  model          String
+  ratio          String
+  status         ReviewStatus @default(PENDING)
+  rewardCredits  Int          @default(0)
+  reviewerId     String?
+  reviewNote     String?      @db.Text
+  reviewedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewer User?   @relation("SubmissionReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  prompt   Prompt? @relation(fields: [promptId], references: [id], onDelete: SetNull)
+  assets   Asset[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([promptId])
+}
+
+model Asset {
+  id           String        @id @default(cuid())
+  kind         AssetKind
+  provider     AssetProvider @default(LOCAL)
+  bucket       String?
+  objectKey    String
+  publicUrl    String?
+  originalName String?
+  mimeType     String
+  sizeBytes    Int
+  width        Int?
+  height       Int?
+  checksum     String?
+  submissionId String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  submission PromptSubmission? @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+  promptImages PromptImage[]
+  generations  ImageGeneration[]
+
+  @@index([provider, objectKey])
+  @@index([kind])
+  @@index([submissionId])
+}
+
+model ImageGeneration {
+  id              String           @id @default(cuid())
+  userId          String
+  promptId        String
+  resultAssetId   String?
+  status          GenerationStatus @default(PENDING)
+  costCredits     Int
+  creatorShareCredits Int          @default(0)
+  provider        String           @default("openai")
+  providerModel   String
+  providerRequestId String?
+  requestPayload  Json?
+  errorCode       String?
+  errorMessage    String?          @db.Text
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  prompt      Prompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
+  resultAsset Asset? @relation(fields: [resultAssetId], references: [id], onDelete: SetNull)
+  creditTransactions CreditTransaction[]
+
+  @@index([userId])
+  @@index([promptId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model CreditTransaction {
+  id           String                @id @default(cuid())
+  userId       String
+  generationId String?
+  type         CreditTransactionType
+  amount       Int
+  balanceAfter Int
+  note         String?
+  metadata     Json?
+  createdAt    DateTime              @default(now())
+
+  user       User             @relation("CreditTransactionUser", fields: [userId], references: [id], onDelete: Cascade)
+  generation ImageGeneration? @relation(fields: [generationId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([type])
+  @@index([generationId])
+}
+
+model SystemSetting {
+  key        String                 @id
+  value      String                 @db.Text
+  valueType  SystemSettingValueType @default(STRING)
+  label      String?
+  group      String?
+  createdAt  DateTime               @default(now())
+  updatedAt  DateTime               @updatedAt
+}

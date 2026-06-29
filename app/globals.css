@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f5f8fa;
+  color: #17202a;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.masonry {
+  column-gap: 18px;
+}
+
+.masonry-item {
+  break-inside: avoid;
+  margin-bottom: 18px;
+}
+
+.masonry-item img,
+article img {
+  image-rendering: auto;
+}
+
+.scrollbar-clean::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.scrollbar-clean::-webkit-scrollbar-thumb {
+  background: #cbd6dd;
+  border-radius: 999px;
+}
