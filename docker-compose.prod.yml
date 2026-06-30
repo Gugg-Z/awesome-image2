@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: promptbay-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-promptbay}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-promptbay}
+      POSTGRES_DB: ${POSTGRES_DB:-promptbay}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-promptbay} -d $${POSTGRES_DB:-promptbay}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: promptbay-web
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-promptbay}:${POSTGRES_PASSWORD:-promptbay}@postgres:5432/${POSTGRES_DB:-promptbay}?schema=public
+      NODE_ENV: production
+      LOCAL_STORAGE_ROOT: /app/storage/uploads
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    volumes:
+      - app-uploads:/app/storage/uploads
+
+volumes:
+  postgres-data:
+  app-uploads:

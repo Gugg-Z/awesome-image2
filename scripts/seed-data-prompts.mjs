@@ -1,5 +1,5 @@
+import "./load-env.mjs";
 import { PrismaClient } from "@prisma/client";
-import { scryptSync, randomBytes } from "crypto";
 import { readFileSync, statSync } from "fs";
 import path from "path";
 
@@ -33,24 +33,17 @@ function unique(items) {
   return [...new Set(items.filter(Boolean))];
 }
 
-function hashPassword(password) {
-  const salt = randomBytes(16).toString("hex");
-  const derivedKey = scryptSync(password, salt, 64);
-
-  return `${salt}:${derivedKey.toString("hex")}`;
-}
-
 async function main() {
+  const adminEmail = (process.env.ADMIN_EMAIL ?? "admin@pb.me").toLowerCase().trim();
   const admin = await prisma.user.upsert({
-    where: { email: "admin@pb.me" },
-    update: { role: "ADMIN", status: "ACTIVE", passwordHash: hashPassword("Ad123123") },
+    where: { email: adminEmail },
+    update: { role: "ADMIN", status: "ACTIVE" },
     create: {
-      email: "admin@pb.me",
-      name: "PromptBay Admin",
+      email: adminEmail,
+      name: process.env.ADMIN_NAME ?? "PromptBay Admin",
       role: "ADMIN",
       status: "ACTIVE",
-      creditBalance: 9999,
-      passwordHash: hashPassword("Ad123123")
+      creditBalance: 9999
     }
   });
 
