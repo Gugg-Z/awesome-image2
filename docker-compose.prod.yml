@@ -1,7 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: promptbay-postgres
+    container_name: awesome-image2-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-promptbay}
@@ -19,7 +19,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: promptbay-web
+    container_name: awesome-image2-web
     restart: unless-stopped
     depends_on:
       postgres:
