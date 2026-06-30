@@ -4,6 +4,7 @@ import EmailProvider from "next-auth/providers/email";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import { ensureDemoAdminUser, ensureDemoUser } from "@/lib/authz";
+import { verifyPassword } from "@/lib/password";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -19,22 +20,52 @@ export const authOptions: NextAuthOptions = {
       id: "demo",
       name: "Demo Login",
       credentials: {
-        role: { label: "Role", type: "text" }
+        role: { label: "Role", type: "text" },
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" }
       },
       async authorize(credentials) {
-        if (process.env.DEMO_LOGIN_ENABLED === "false") {
-          return null;
+        if (credentials?.email && credentials?.password) {
+          const user = await prisma.user.findUnique({
+            where: { email: credentials.email.toLowerCase().trim() }
+          });
+
+          if (!user?.passwordHash || user.status !== "ACTIVE") {
+            return null;
+          }
+
+          const validPassword = await verifyPassword(credentials.password, user.passwordHash);
+
+          if (!validPassword) {
+            return null;
+          }
+
+          return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            status: user.status
+          };
         }
 
-        const user = credentials?.role === "admin" ? await ensureDemoAdminUser() : await ensureDemoUser();
+        if (credentials?.role) {
+          if (process.env.DEMO_LOGIN_ENABLED === "false") {
+            return null;
+          }
 
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          status: user.status
-        };
+          const user = credentials.role === "admin" ? await ensureDemoAdminUser() : await ensureDemoUser();
+
+          return {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            status: user.status
+          };
+        }
+
+        return null;
       }
     })
   ],

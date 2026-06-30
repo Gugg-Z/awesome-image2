@@ -4,13 +4,14 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Coins, CreditCard, FileClock, History, ImageIcon, Loader2, PlusCircle } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
-import { creditLogs, generationLogs, submissions } from "@/lib/mock-data";
+import { creditLogs, generationLogs } from "@/lib/mock-data";
 
 type AccountActivity = {
   user: {
     id: string;
     name: string;
     email: string;
+    role: "USER" | "DEVELOPER" | "ADMIN";
     creditBalance: number;
   };
   credits: Array<{
@@ -31,6 +32,12 @@ type AccountActivity = {
     providerModel: string;
     createdAt: string | Date;
   }>;
+  submissions: Array<{
+    id: string;
+    title: string;
+    status: string;
+    createdAt: string | Date;
+  }>;
 };
 
 type RechargePackage = {
@@ -45,6 +52,7 @@ const fallbackActivity: AccountActivity = {
     id: "demo",
     name: "设计师 Demo",
     email: "demo@promptbay.local",
+    role: "USER",
     creditBalance: 1280
   },
   credits: creditLogs.map((item, index) => ({
@@ -55,6 +63,7 @@ const fallbackActivity: AccountActivity = {
     note: item.note,
     createdAt: item.time
   })),
+  submissions: [],
   generations: generationLogs.map((item, index) => ({
     id: `mock-generation-${index}`,
     promptTitle: item.prompt,
@@ -72,6 +81,7 @@ export default function AccountPage() {
   const [packages, setPackages] = useState<RechargePackage[]>([]);
   const [loading, setLoading] = useState(true);
   const [rechargingId, setRechargingId] = useState<string | null>(null);
+  const canUseMockRecharge = activity.user.role !== "USER";
 
   useEffect(() => {
     let cancelled = false;
@@ -117,6 +127,10 @@ export default function AccountPage() {
       });
 
       if (!response.ok) throw new Error("充值失败");
+      const data = await response.json();
+      if (typeof data?.recharge?.balanceAfter === "number") {
+        window.dispatchEvent(new CustomEvent("promptbay:credits-changed", { detail: { credits: data.recharge.balanceAfter } }));
+      }
       await loadActivity();
     } finally {
       setRechargingId(null);
@@ -127,7 +141,7 @@ export default function AccountPage() {
     <div className="min-h-screen bg-mist">
       <SiteHeader />
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-        <section className="mb-6 grid gap-4 md:grid-cols-[1.3fr_1fr_1fr]">
+        <section id="profile" className="mb-6 grid scroll-mt-24 gap-4 md:grid-cols-[1.3fr_1fr_1fr]">
           <div className="rounded-xl border border-line bg-white p-5 shadow-sm">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -149,7 +163,7 @@ export default function AccountPage() {
 
           {[
             { icon: ImageIcon, value: activity.generations.length, label: "生成记录" },
-            { icon: FileClock, value: submissions.length, label: "我的投稿" }
+            { icon: FileClock, value: activity.submissions.length, label: "我的投稿" }
           ].map((item) => (
             <div key={item.label} className="rounded-xl border border-line bg-white p-5 shadow-sm">
               <item.icon className="text-brand-600" size={24} />
@@ -160,31 +174,45 @@ export default function AccountPage() {
         </section>
 
         <section className="grid gap-6 lg:grid-cols-2">
-          <div className="rounded-xl border border-line bg-white p-5 shadow-sm lg:col-span-2">
+          <div id="favorites" className="rounded-xl border border-line bg-white p-5 shadow-sm scroll-mt-24 lg:col-span-2">
+            <div className="mb-2 flex items-center gap-2">
+              <ImageIcon size={18} className="text-brand-600" />
+              <h2 className="font-semibold text-ink">我的收藏</h2>
+            </div>
+            <p className="text-sm text-slate-500">收藏夹功能后续接入，这里先保留入口位置。</p>
+          </div>
+
+          <div id="recharge" className="rounded-xl border border-line bg-white p-5 shadow-sm scroll-mt-24 lg:col-span-2">
             <div className="mb-4 flex items-center gap-2">
               <CreditCard size={18} className="text-brand-600" />
-              <h2 className="font-semibold text-ink">积分充值</h2>
+              <h2 className="font-semibold text-ink">{canUseMockRecharge ? "测试充值" : "积分充值"}</h2>
             </div>
-            <div className="grid gap-3 md:grid-cols-3">
-              {packages.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => recharge(item.id)}
-                  disabled={rechargingId === item.id}
-                  className="flex items-center justify-between rounded-lg border border-line p-4 text-left transition hover:border-brand-100 hover:bg-brand-50 disabled:opacity-60"
-                >
-                  <span>
-                    <span className="block text-sm font-semibold text-ink">{item.name}</span>
-                    <span className="mt-1 block text-xs text-slate-500">{(item.amountCents / 100).toFixed(2)} 元</span>
-                  </span>
-                  <span className="inline-flex items-center gap-1 text-sm font-semibold text-brand-700">
-                    {rechargingId === item.id && <Loader2 size={14} className="animate-spin" />}
-                    +{item.credits}
-                  </span>
-                </button>
-              ))}
-            </div>
+            {canUseMockRecharge ? (
+              <div className="grid gap-3 md:grid-cols-3">
+                {packages.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => recharge(item.id)}
+                    disabled={rechargingId === item.id}
+                    className="flex items-center justify-between rounded-lg border border-line p-4 text-left transition hover:border-brand-100 hover:bg-brand-50 disabled:opacity-60"
+                  >
+                    <span>
+                      <span className="block text-sm font-semibold text-ink">{item.name}</span>
+                      <span className="mt-1 block text-xs text-slate-500">{(item.amountCents / 100).toFixed(2)} 元</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1 text-sm font-semibold text-brand-700">
+                      {rechargingId === item.id && <Loader2 size={14} className="animate-spin" />}
+                      +{item.credits}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-line bg-mist p-4 text-sm leading-6 text-slate-600">
+                测试充值入口不对普通用户开放。正式支付通道接入后，这里会展示可购买的积分套餐。
+              </div>
+            )}
           </div>
 
           <div className="rounded-xl border border-line bg-white p-5 shadow-sm">
@@ -196,21 +224,27 @@ export default function AccountPage() {
               </Link>
             </div>
             <div className="space-y-3">
-              {submissions.map((item) => (
-                <div key={item.id} className="flex items-center justify-between rounded-lg border border-line p-3">
-                  <div>
-                    <p className="text-sm font-medium text-ink">{item.title}</p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {item.id} · {item.date}
-                    </p>
+              {activity.submissions.length ? (
+                activity.submissions.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between rounded-lg border border-line p-3">
+                    <div>
+                      <p className="text-sm font-medium text-ink">{item.title}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {shortId(item.id)} · {formatTime(item.createdAt)}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700">{reviewStatusLabel(item.status)}</span>
                   </div>
-                  <span className="rounded-full bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700">{item.status}</span>
+                ))
+              ) : (
+                <div className="rounded-lg border border-dashed border-line bg-mist p-4 text-sm text-slate-500">
+                  暂无投稿记录。提交第一个 Prompt 后会显示在这里。
                 </div>
-              ))}
+              )}
             </div>
           </div>
 
-          <div className="rounded-xl border border-line bg-white p-5 shadow-sm">
+          <div id="credits" className="rounded-xl border border-line bg-white p-5 shadow-sm scroll-mt-24">
             <div className="mb-4 flex items-center gap-2">
               <History size={18} className="text-brand-600" />
               <h2 className="font-semibold text-ink">积分流水</h2>
@@ -233,7 +267,7 @@ export default function AccountPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-line bg-white p-5 shadow-sm lg:col-span-2">
+          <div id="history" className="rounded-xl border border-line bg-white p-5 shadow-sm scroll-mt-24 lg:col-span-2">
             <h2 className="mb-4 font-semibold text-ink">生成记录</h2>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] text-left text-sm">
@@ -295,6 +329,20 @@ function statusLabel(status: string) {
   };
 
   return labels[status] ?? status;
+}
+
+function reviewStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    PENDING: "待审核",
+    APPROVED: "已通过",
+    REJECTED: "已拒绝"
+  };
+
+  return labels[status] ?? status;
+}
+
+function shortId(id: string) {
+  return id.length > 8 ? id.slice(0, 8) : id;
 }
 
 function formatTime(value: string | Date) {

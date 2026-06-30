@@ -1,24 +1,33 @@
 import { NextResponse } from "next/server";
-import { requireUser } from "@/lib/authz";
-import { generateImageFromPrompt, InsufficientCreditsError } from "@/lib/generation-service";
+import { requireSignedInUser } from "@/lib/authz";
+import { createImageGenerationJob, InsufficientCreditsError, MissingUserError } from "@/lib/generation-service";
+
+export const maxDuration = 300;
 
 export async function POST(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireUser();
+  const auth = await requireSignedInUser();
   if (!auth.ok) return auth.response;
 
   const { id } = await params;
 
   try {
-    const generation = await generateImageFromPrompt({
+    const body = await _request.json().catch(() => ({}));
+    const generation = await createImageGenerationJob({
       promptId: id,
-      userId: auth.context.userId
+      userId: auth.context.userId,
+      promptText: typeof body.prompt === "string" ? body.prompt : undefined,
+      size: typeof body.size === "string" ? body.size : undefined
     });
 
     return NextResponse.json({ generation });
   } catch (error) {
+    if (error instanceof MissingUserError) {
+      return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+    }
+
     if (error instanceof InsufficientCreditsError) {
       return NextResponse.json(
         {

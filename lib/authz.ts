@@ -39,6 +39,19 @@ export async function requireUser() {
   return { ok: true as const, context };
 }
 
+export async function requireSignedInUser() {
+  const context = await getAuthContext();
+
+  if (!context.userId) {
+    return {
+      ok: false as const,
+      response: NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 })
+    };
+  }
+
+  return { ok: true as const, context: { ...context, userId: context.userId } };
+}
+
 export async function requireAdmin() {
   const context = await getAuthContext();
 

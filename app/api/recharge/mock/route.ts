@@ -11,6 +11,10 @@ export async function POST(request: Request) {
   const auth = await requireUser();
   if (!auth.ok) return auth.response;
 
+  if (!auth.context.userId || auth.context.role === "USER") {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+
   const parsed = rechargeSchema.safeParse(await request.json());
 
   if (!parsed.success) {

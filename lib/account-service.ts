@@ -28,6 +28,13 @@ type GenerationRecord = {
   } | null;
 };
 
+type SubmissionRecord = {
+  id: string;
+  title: string;
+  status: string;
+  createdAt: Date;
+};
+
 export async function getAccountActivity(userId?: string) {
   try {
     const user = userId
@@ -38,7 +45,7 @@ export async function getAccountActivity(userId?: string) {
       return mockAccountActivity();
     }
 
-    const [credits, generations] = await Promise.all([
+    const [credits, generations, submissions] = await Promise.all([
       prisma.creditTransaction.findMany({
         where: { userId: user.id },
         orderBy: { createdAt: "desc" },
@@ -52,6 +59,17 @@ export async function getAccountActivity(userId?: string) {
         },
         orderBy: { createdAt: "desc" },
         take: 50
+      }),
+      prisma.promptSubmission.findMany({
+        where: { userId: user.id },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          createdAt: true
+        },
+        orderBy: { createdAt: "desc" },
+        take: 50
       })
     ]);
 
@@ -60,6 +78,7 @@ export async function getAccountActivity(userId?: string) {
         id: user.id,
         name: user.name ?? "Demo User",
         email: user.email,
+        role: user.role,
         creditBalance: user.creditBalance
       },
       credits: (credits as CreditRecord[]).map((item) => ({
@@ -82,6 +101,12 @@ export async function getAccountActivity(userId?: string) {
         providerModel: item.providerModel,
         createdAt: item.createdAt,
         completedAt: item.completedAt
+      })),
+      submissions: (submissions as SubmissionRecord[]).map((item) => ({
+        id: item.id,
+        title: item.title,
+        status: item.status,
+        createdAt: item.createdAt
       }))
     };
   } catch {
@@ -95,6 +120,7 @@ function mockAccountActivity() {
       id: "demo",
       name: "设计师 Demo",
       email: "demo@promptbay.local",
+      role: "USER",
       creditBalance: 1280
     },
     credits: creditLogs.map((item, index) => ({
@@ -105,6 +131,7 @@ function mockAccountActivity() {
       note: item.note,
       createdAt: item.time
     })),
+    submissions: [],
     generations: generationLogs.map((item, index) => ({
       id: `mock-generation-${index}`,
       promptTitle: item.prompt,
